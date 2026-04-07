@@ -22,15 +22,7 @@ app.get("/", (req, res) => {
   });
 });
 
-app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "whatsapp-qr-worker",
-    ready
-  });
-});
-
-app.post("/session/create", async (req, res) => {
+app.get("/session/create", async (req, res) => {
   try {
     if (client) {
       return res.json({
@@ -72,21 +64,12 @@ app.post("/session/create", async (req, res) => {
       });
     }, 5000);
   } catch (error) {
-    console.error("Erro em /session/create:", error);
+    console.error("Erro:", error);
     res.status(500).json({
       ok: false,
       error: String(error)
     });
   }
-});
-
-app.get("/session/status", (req, res) => {
-  res.json({
-    ok: true,
-    ready,
-    hasClient: !!client,
-    hasQr: !!currentQR
-  });
 });
 
 app.listen(port, () => {
