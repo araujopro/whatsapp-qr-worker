@@ -1,9 +1,11 @@
-import makeWASocket, {
+const {
+  default: makeWASocket,
   DisconnectReason,
   useMultiFileAuthState
-} from '@whiskeysockets/baileys'
-import qrcode from 'qrcode-terminal'
-import pino from 'pino'
+} = require('@whiskeysockets/baileys')
+
+const qrcode = require('qrcode-terminal')
+const pino = require('pino')
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 
@@ -71,7 +73,7 @@ async function startWhatsApp() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', async (update) => {
+  sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
@@ -84,17 +86,14 @@ async function startWhatsApp() {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
 
       console.log('❌ Conexão fechada. Status:', statusCode)
-      console.log('🔁 Reconectar:', shouldReconnect)
 
       if (shouldReconnect) {
         startWhatsApp()
-      } else {
-        console.log('🚪 Sessão desconectada. Será necessário conectar novamente.')
       }
     }
 
     if (connection === 'open') {
-      console.log('✅ WhatsApp conectado com sucesso!')
+      console.log('✅ WhatsApp conectado!')
     }
   })
 
@@ -108,20 +107,13 @@ async function startWhatsApp() {
 
       const messageText = extractMessageText(msg).trim()
       const from = msg.key?.remoteJid || ''
-      const pushName = msg.pushName || ''
-      const messageId = msg.key?.id || ''
 
-      console.log('📩 Nova mensagem recebida de:', from)
-      console.log('📝 Conteúdo:', messageText || '[mensagem sem texto]')
+      console.log('📩 Nova mensagem:', messageText)
 
       const data = {
-        event: 'message_received',
-        messageId,
         from,
-        pushName,
         message: messageText,
-        timestamp: new Date().toISOString(),
-        raw: msg
+        timestamp: new Date().toISOString()
       }
 
       await sendToWebhook(data)
@@ -131,7 +123,4 @@ async function startWhatsApp() {
   })
 }
 
-startWhatsApp().catch((error) => {
-  console.error('❌ Erro fatal ao iniciar worker:', error)
-  process.exit(1)
-})
+startWhatsApp()
