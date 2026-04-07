@@ -22,39 +22,66 @@ app.get("/", (req, res) => {
   });
 });
 
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    service: "whatsapp-qr-worker",
+    ready
+  });
+});
+
+function createClient() {
+  return new Client({
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process"
+      ]
+    }
+  });
+}
+
+async function startSession() {
+  if (client) return;
+
+  client = createClient();
+
+  client.on("qr", async (qr) => {
+    currentQR = await qrcode.toDataURL(qr);
+    console.log("QR gerado");
+  });
+
+  client.on("ready", () => {
+    ready = true;
+    console.log("WhatsApp conectado");
+  });
+
+  client.on("disconnected", (reason) => {
+    console.log("WhatsApp desconectado:", reason);
+    client = null;
+    currentQR = null;
+    ready = false;
+  });
+
+  client.on("auth_failure", (msg) => {
+    console.error("Falha de autenticação:", msg);
+  });
+
+  await client.initialize();
+}
+
 app.get("/session/create", async (req, res) => {
   try {
-    if (client) {
-      return res.json({
-        ok: true,
-        message: "Sessão já iniciada",
-        ready,
-        qr: currentQR
-      });
+    if (!client) {
+      await startSession();
     }
-
-    client = new Client({
-      authStrategy: new LocalAuth()
-    });
-
-    client.on("qr", async (qr) => {
-      currentQR = await qrcode.toDataURL(qr);
-      console.log("QR gerado");
-    });
-
-    client.on("ready", () => {
-      ready = true;
-      console.log("WhatsApp conectado");
-    });
-
-    client.on("disconnected", (reason) => {
-      console.log("WhatsApp desconectado:", reason);
-      client = null;
-      currentQR = null;
-      ready = false;
-    });
-
-    client.initialize();
 
     setTimeout(() => {
       res.json({
@@ -64,12 +91,22 @@ app.get("/session/create", async (req, res) => {
       });
     }, 5000);
   } catch (error) {
-    console.error("Erro:", error);
+    console.error("Erro em /session/create:", error);
     res.status(500).json({
       ok: false,
-      error: String(error)
+      error: String(error),
+      stack: error?.stack || null
     });
   }
+});
+
+app.get("/session/status", (req, res) => {
+  res.json({
+    ok: true,
+    ready,
+    hasClient: !!client,
+    hasQr: !!currentQR
+  });
 });
 
 app.listen(port, () => {
