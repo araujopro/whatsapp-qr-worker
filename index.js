@@ -1,27 +1,17 @@
 const express = require('express')
-const app = express()
-
-app.get('/health', (req, res) => {
-  res.json({
-    ok: true,
-    service: 'whatsapp-qr-worker'
-  })
-})
-
-const PORT = process.env.PORT || 3000
-
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor HTTP rodando na porta ${PORT}`)
-})const {
+const {
   default: makeWASocket,
   DisconnectReason,
   useMultiFileAuthState
 } = require('@whiskeysockets/baileys')
-
 const qrcode = require('qrcode-terminal')
 const pino = require('pino')
 
+const app = express()
+app.use(express.json())
+
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
+const PORT = process.env.PORT || 3000
 
 function validateEnv() {
   const required = ['WEBHOOK_URL', 'WEBHOOK_SECRET', 'SUPABASE_ANON_KEY']
@@ -75,6 +65,34 @@ async function sendToWebhook(data) {
   }
 }
 
+let latestQr = null
+let connectionStatus = 'starting'
+let sockInstance = null
+
+app.get('/', (req, res) => {
+  res.json({
+    ok: true,
+    service: 'whatsapp-qr-worker',
+    status: connectionStatus
+  })
+})
+
+app.get('/health', (req, res) => {
+  res.json({
+    ok: true,
+    service: 'whatsapp-qr-worker',
+    status: connectionStatus
+  })
+})
+
+app.get('/qr', (req, res) => {
+  res.json({
+    ok: true,
+    qr: latestQr,
+    status: connectionStatus
+  })
+})
+
 async function startWhatsApp() {
   validateEnv()
 
@@ -85,29 +103,44 @@ async function startWhatsApp() {
     logger
   })
 
+  sockInstance = sock
+
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', (update) => {
+  sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
+      latestQr = qr
+      connectionStatus = 'qr_ready'
       console.log('📱 Escaneie o QR Code abaixo:')
       qrcode.generate(qr, { small: true })
     }
 
+    if (connection === 'open') {
+      connectionStatus = 'connected'
+      latestQr = null
+      console.log('✅ WhatsApp conectado com sucesso!')
+    }
+
     if (connection === 'close') {
+      connectionStatus = 'disconnected'
+
       const statusCode = lastDisconnect?.error?.output?.statusCode
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
 
       console.log('❌ Conexão fechada. Status:', statusCode)
+      console.log('🔁 Reconectar:', shouldReconnect)
 
       if (shouldReconnect) {
-        startWhatsApp()
+        setTimeout(() => {
+          startWhatsApp().catch((err) => {
+            console.error('❌ Erro ao reconectar:', err.message)
+          })
+        }, 3000)
+      } else {
+        console.log('🚪 Sessão desconectada. Será necessário conectar novamente.')
       }
-    }
-
-    if (connection === 'open') {
-      console.log('✅ WhatsApp conectado!')
     }
   })
 
@@ -121,13 +154,27 @@ async function startWhatsApp() {
 
       const messageText = extractMessageText(msg).trim()
       const from = msg.key?.remoteJid || ''
+      const pushName = msg.pushName || ''
+      const messageId = msg.key?.id || ''
 
-      console.log('📩 Nova mensagem:', messageText)
+      console.log('📩 Nova mensagem recebida de:', from)
+      console.log('📝 Conteúdo:', messageText || '[mensagem sem texto]')
 
       const data = {
-        from,
-        message: messageText,
-        timestamp: new Date().toISOString()
+        event: 'message_received',
+        channel: 'whatsapp',
+        sessionId: process.env.SESSION_ID || null,
+        sender: {
+          id: from,
+          name: pushName
+        },
+        message: {
+          id: messageId,
+          text: messageText,
+          type: 'text'
+        },
+        timestamp: new Date().toISOString(),
+        raw: msg
       }
 
       await sendToWebhook(data)
@@ -137,4 +184,11 @@ async function startWhatsApp() {
   })
 }
 
-startWhatsApp()
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor HTTP rodando na porta ${PORT}`)
+})
+
+startWhatsApp().catch((error) => {
+  console.error('❌ Erro fatal ao iniciar worker:', error)
+  process.exit(1)
+})
