@@ -1,4 +1,18 @@
-const {
+const express = require('express')
+const app = express()
+
+app.get('/health', (req, res) => {
+  res.json({
+    ok: true,
+    service: 'whatsapp-qr-worker'
+  })
+})
+
+const PORT = process.env.PORT || 3000
+
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor HTTP rodando na porta ${PORT}`)
+})const {
   default: makeWASocket,
   DisconnectReason,
   useMultiFileAuthState
