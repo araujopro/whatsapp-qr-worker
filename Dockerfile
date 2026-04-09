@@ -1,6 +1,5 @@
 FROM node:20-bookworm-slim
 
-# 🔥 INSTALAR GIT (ESSENCIAL)
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -10,9 +9,9 @@ RUN npm install --omit=dev
 
 COPY src ./src
 
-ENV PORT=3000
+ENV PORT=8080
 ENV SESSION_STORAGE_DIR=/data/baileys-auth
 
-EXPOSE 3000
+EXPOSE 8080
 
 CMD ["npm", "start"]
