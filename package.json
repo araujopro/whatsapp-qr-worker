@@ -1,18 +1,11 @@
 {
   "name": "whatsapp-qr-worker",
-  "version": "2.0.0",
-  "private": true,
-  "type": "module",
+  "version": "1.0.0",
+  "main": "index.js",
   "scripts": {
-    "start": "node src/server.mjs"
-  },
-  "engines": {
-    "node": ">=20"
+    "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.18",
-    "express": "^4.21.2",
-    "qrcode": "^1.5.4",
-    "pino": "^8.17.0"
+    "express": "^4.18.2"
   }
 }
